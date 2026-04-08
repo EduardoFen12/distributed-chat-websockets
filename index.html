@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chat — Sistemas Distribuídos</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* ===== VARIÁVEIS DE TEMA ===== */
+    :root {
+      --bg:        #0d0f14;
+      --surface:   #161920;
+      --border:    #252833;
+      --accent:    #00e5ff;
+      --admin:     #ff4757;
+      --system:    #a8b2d8;
+      --text:      #ccd6f6;
+      --muted:     #495670;
+      --success:   #64ffda;
+      --mono:      'JetBrains Mono', monospace;
+      --sans:      'IBM Plex Sans', sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* Fundo com grid sutil */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(0,229,255,.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,229,255,.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+    }
+
+    /* ===== LAYOUT PRINCIPAL ===== */
+    .app {
+      width: min(900px, 98vw);
+      height: min(680px, 96vh);
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--surface);
+      box-shadow: 0 0 60px rgba(0,229,255,.06), 0 20px 60px rgba(0,0,0,.5);
+      position: relative;
+    }
+
+    /* ===== HEADER ===== */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 24px;
+      border-bottom: 1px solid var(--border);
+      background: rgba(255,255,255,.02);
+    }
+
+    .status-dot {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+      transition: all .3s;
+    }
+    .status-dot.online { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .status-dot.admin-mode { background: var(--admin); box-shadow: 0 0 8px var(--admin); }
+
+    header h1 {
+      font-family: var(--mono);
+      font-size: 14px;
+      font-weight: 700;
+      letter-spacing: .05em;
+      color: var(--accent);
+    }
+
+    .room-badge {
+      margin-left: auto;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 20px;
+      background: rgba(0,229,255,.08);
+      border: 1px solid rgba(0,229,255,.2);
+      color: var(--accent);
+      display: none;
+    }
+
+    /* ===== TELA DE LOGIN ===== */
+    #login-screen {
+      position: absolute; inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      background: var(--surface);
+      z-index: 10;
+      padding: 40px;
+      transition: opacity .4s, transform .4s;
+    }
+
+    #login-screen.hidden {
+      opacity: 0;
+      pointer-events: none;
+      transform: scale(.97);
+    }
+
+    .login-title {
+      font-family: var(--mono);
+      font-size: 22px;
+      color: var(--accent);
+      text-align: center;
+    }
+    .login-title span { color: var(--muted); font-size: 13px; display: block; margin-top: 6px; }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      width: min(360px, 100%);
+    }
+
+    .field-group { display: flex; flex-direction: column; gap: 6px; }
+    .field-group label {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    input[type="text"] {
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-family: var(--mono);
+      font-size: 14px;
+      outline: none;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    input[type="text"]:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(0,229,255,.08);
+    }
+
+    .hint {
+      font-size: 11px;
+      color: var(--muted);
+      font-family: var(--mono);
+    }
+    .hint b { color: var(--admin); }
+
+    .btn-login {
+      background: var(--accent);
+      color: #000;
+      border: none;
+      border-radius: 8px;
+      padding: 12px;
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 13px;
+      letter-spacing: .05em;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: opacity .2s, transform .1s;
+    }
+    .btn-login:hover { opacity: .9; transform: translateY(-1px); }
+    .btn-login:active { transform: translateY(0); }
+
+    /* ===== ÁREA DE CHAT ===== */
+    #chat-area {
+      overflow-y: auto;
+      padding: 20px 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      scroll-behavior: smooth;
+    }
+
+    #chat-area::-webkit-scrollbar { width: 4px; }
+    #chat-area::-webkit-scrollbar-track { background: transparent; }
+    #chat-area::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    /* ===== MENSAGENS ===== */
+    .msg {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      max-width: 75%;
+      animation: fadeUp .25s ease;
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .msg.normal {
+      background: rgba(255,255,255,.04);
+      align-self: flex-start;
+    }
+    .msg.normal.own {
+      background: rgba(0,229,255,.08);
+      border: 1px solid rgba(0,229,255,.15);
+      align-self: flex-end;
+    }
+
+    .msg-user {
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .msg.own .msg-user { color: var(--success); text-align: right; }
+
+    .msg-text {
+      font-size: 14px;
+      line-height: 1.5;
+      color: var(--text);
+    }
+
+    /* Mensagens de sistema */
+    .msg.system {
+      background: transparent;
+      align-self: center;
+    }
+    .msg.system .msg-text {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    /* Admin broadcast — destaque vermelho */
+    .msg.admin {
+      align-self: stretch;
+      background: rgba(255,71,87,.08);
+      border: 1px solid rgba(255,71,87,.3);
+      border-left: 3px solid var(--admin);
+    }
+    .msg.admin .msg-user {
+      color: var(--admin);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .msg.admin .msg-user::before {
+      content: '⚠ ADMIN BROADCAST';
+      font-size: 9px;
+      background: var(--admin);
+      color: #fff;
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+
+    /* Mensagens de erro */
+    .msg.error {
+      align-self: stretch;
+      background: rgba(255,71,87,.06);
+      border: 1px solid rgba(255,71,87,.2);
+    }
+    .msg.error .msg-text {
+      color: var(--admin);
+      font-family: var(--mono);
+      font-size: 12px;
+    }
+
+    /* ===== INPUT DE ENVIO ===== */
+    .input-bar {
+      display: flex;
+      gap: 10px;
+      padding: 16px 24px;
+      border-top: 1px solid var(--border);
+      background: rgba(255,255,255,.01);
+    }
+
+    #msg-input {
+      flex: 1;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text);
+      font-family: var(--sans);
+      font-size: 14px;
+      outline: none;
+      transition: border-color .2s;
+    }
+    #msg-input:focus { border-color: var(--accent); }
+    #msg-input::placeholder { color: var(--muted); }
+
+    .btn-send, .btn-broadcast {
+      border: none;
+      border-radius: 8px;
+      padding: 10px 18px;
+      font-family: var(--mono);
+      font-weight: 700;
+      font-size: 12px;
+      cursor: pointer;
+      transition: opacity .2s, transform .1s;
+      letter-spacing: .04em;
+    }
+    .btn-send:active, .btn-broadcast:active { transform: scale(.97); }
+
+    .btn-send {
+      background: var(--accent);
+      color: #000;
+    }
+    .btn-send:hover { opacity: .9; }
+
+    .btn-broadcast {
+      background: var(--admin);
+      color: #fff;
+      display: none; /* aparece só para admins */
+    }
+    .btn-broadcast:hover { opacity: .9; }
+
+    /* ===== ESTADO DE CONEXÃO ===== */
+    .connecting-msg {
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--muted);
+      text-align: center;
+      padding: 12px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="status-dot" id="status-dot"></div>
+    <h1>ws://chat</h1>
+    <div class="room-badge" id="room-badge"></div>
+  </header>
+
+  <!-- TELA DE LOGIN (sobrepõe tudo enquanto não logou) -->
+  <div id="login-screen">
+    <div class="login-title">
+      Entrar no Chat
+      <span>Sistemas Distribuídos — WebSockets</span>
+    </div>
+    <div class="login-form">
+      <div class="field-group">
+        <label>Seu nome</label>
+        <input type="text" id="nome" placeholder="ex: Alice" autocomplete="off" />
+        <div class="hint">Dica: use <b>ADMIN</b> no nome para ganhar privilégios de admin</div>
+      </div>
+      <div class="field-group">
+        <label>Sala</label>
+        <input type="text" id="sala" placeholder="ex: geral" value="geral" autocomplete="off" />
+      </div>
+      <button class="btn-login" onclick="logar()">Conectar →</button>
+    </div>
+    <div class="connecting-msg" id="conn-status">Aguardando conexão com o servidor...</div>
+  </div>
+
+  <!-- ÁREA DE CHAT -->
+  <div id="chat-area"></div>
+
+  <!-- BARRA DE ENVIO -->
+  <div class="input-bar">
+    <input type="text" id="msg-input" placeholder="Digite sua mensagem..."
+           onkeydown="if(event.key==='Enter') enviar()" />
+    <button class="btn-send" onclick="enviar()">Enviar</button>
+    <button class="btn-broadcast" id="btn-broadcast" onclick="adminBroadcast()">📢 Broadcast</button>
+  </div>
+
+</div>
+
+<script>
+  // =========================================================================
+  // TODO 5: CONEXÃO WEBSOCKET
+  // =========================================================================
+  const ws = new WebSocket('ws://localhost:8080');
+
+  // Variáveis de estado do cliente
+  let meuNome = '';
+  let minhaSala = '';
+  let souAdmin = false;
+
+  // Referências a elementos do DOM
+  const chatArea      = document.getElementById('chat-area');
+  const statusDot     = document.getElementById('status-dot');
+  const roomBadge     = document.getElementById('room-badge');
+  const loginScreen   = document.getElementById('login-screen');
+  const connStatus    = document.getElementById('conn-status');
+  const btnBroadcast  = document.getElementById('btn-broadcast');
+
+  // --- Eventos de estado da conexão ---
+  ws.onopen = () => {
+    connStatus.textContent = 'Conectado! Preencha seus dados para entrar.';
+    statusDot.classList.add('online');
+  };
+
+  ws.onclose = () => {
+    statusDot.classList.remove('online', 'admin-mode');
+    adicionarMensagem({ type: 'error', text: 'Conexão com o servidor encerrada.' });
+  };
+
+  ws.onerror = () => {
+    connStatus.textContent = '❌ Erro ao conectar. Servidor está rodando?';
+  };
+
+  // =========================================================================
+  // TODO 6: RENDERIZAÇÃO DAS MENSAGENS
+  // =========================================================================
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    adicionarMensagem(data);
+  };
+
+  function adicionarMensagem(data) {
+    const div = document.createElement('div');
+    div.classList.add('msg');
+
+    if (data.type === 'message') {
+      // Mensagem normal de sala
+      div.classList.add('normal');
+      if (data.user === meuNome) div.classList.add('own'); // destaca próprias mensagens
+
+      div.innerHTML = `
+        <div class="msg-user">${escapar(data.user)}</div>
+        <div class="msg-text">${escapar(data.text)}</div>
+      `;
+
+    } else if (data.type === 'admin_broadcast') {
+      // TODO 6 explícito: estilo especial para admin (destaque vermelho)
+      div.classList.add('admin');
+      div.innerHTML = `
+        <div class="msg-user">${escapar(data.user)}</div>
+        <div class="msg-text">${escapar(data.text)}</div>
+      `;
+
+    } else if (data.type === 'system') {
+      div.classList.add('system');
+      div.innerHTML = `<div class="msg-text">— ${escapar(data.text)} —</div>`;
+
+    } else if (data.type === 'error') {
+      div.classList.add('error');
+      div.innerHTML = `<div class="msg-text">⚠ ${escapar(data.text)}</div>`;
+    }
+
+    chatArea.appendChild(div);
+    // Rola automaticamente para o final
+    chatArea.scrollTop = chatArea.scrollHeight;
+  }
+
+  // =========================================================================
+  // AÇÕES DO USUÁRIO
+  // =========================================================================
+
+  // Função de login (TODO 5 — enviar JSON de login)
+  function logar() {
+    const nome = document.getElementById('nome').value.trim();
+    const sala = document.getElementById('sala').value.trim() || 'geral';
+
+    if (!nome) { alert('Digite seu nome!'); return; }
+    if (ws.readyState !== WebSocket.OPEN) {
+      alert('Ainda não conectado ao servidor.'); return;
+    }
+
+    meuNome  = nome;
+    minhaSala = sala;
+    souAdmin  = nome.includes('ADMIN'); // lógica simples definida pelo enunciado
+
+    // Envia a mensagem de login para o servidor
+    ws.send(JSON.stringify({
+      type:    'login',
+      user:    meuNome,
+      room:    minhaSala,
+      isAdmin: souAdmin
+    }));
+
+    // Atualiza a UI após login
+    loginScreen.classList.add('hidden');
+    roomBadge.textContent = `#${minhaSala}`;
+    roomBadge.style.display = 'block';
+
+    if (souAdmin) {
+      statusDot.classList.remove('online');
+      statusDot.classList.add('admin-mode');
+      btnBroadcast.style.display = 'block'; // mostra botão de broadcast para admins
+    }
+  }
+
+  // Envia mensagem normal para a sala
+  function enviar() {
+    const input = document.getElementById('msg-input');
+    const texto = input.value.trim();
+    if (!texto) return;
+
+    ws.send(JSON.stringify({ type: 'message', text: texto }));
+    input.value = '';
+    input.focus();
+  }
+
+  // Admin: envia para todas as salas
+  function adminBroadcast() {
+    const input = document.getElementById('msg-input');
+    const texto = input.value.trim();
+    if (!texto) return;
+
+    ws.send(JSON.stringify({ type: 'admin_broadcast', text: texto }));
+    input.value = '';
+    input.focus();
+  }
+
+  // Sanitiza strings para evitar XSS (inserção de HTML malicioso no chat)
+  function escapar(str) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(str || ''));
+    return div.innerHTML;
+  }
+</script>
+
+</body>
+</html>
